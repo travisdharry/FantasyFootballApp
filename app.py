@@ -1,7 +1,7 @@
 # Import dependencies
 # Standard python libraries
-import json
 import os
+
 # Third-party libraries
 from flask import Flask, redirect, request, url_for, render_template, session
 from flask_login import (
@@ -12,30 +12,17 @@ from flask_login import (
     login_user,
     logout_user,
 )
-from bs4 import BeautifulSoup, ProcessingInstruction
 from oauthlib.oauth2 import WebApplicationClient
 import requests
 import pandas as pd
-import psycopg2
-import plotly
-import plotly.express as px
-import plotly.graph_objects as go
 
 # Internal imports
-from user import User
-from db import get_df
-from mfl import get_mfl, get_mfl_liveScoring, get_mfl_league
+import ff_package
 
 # Configuration (These variables are stored as environment variables)
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", None)
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", None)
 GOOGLE_DISCOVERY_URL = ("https://accounts.google.com/.well-known/openid-configuration")
-
-# Find environment variables
-DATABASE_URL = os.environ.get("DATABASE_URL", None)
-# sqlalchemy deprecated urls which begin with "postgres://"; now it needs to start with "postgresql://"
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 # Create a new Flask instance
 app = Flask(__name__)
