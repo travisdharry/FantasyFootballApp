@@ -17,7 +17,12 @@ import requests
 import pandas as pd
 
 # Internal imports
-import ff_package
+from ffpackage.scraping import mfl
+# from ffpackage.scraping import ffdb
+# from ffpackage.scraping import ourlads
+#from ffpackage.viz import viz
+from appmanager.database import db
+from appmanager.user import user
 
 # Configuration (These variables are stored as environment variables)
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", None)
@@ -43,11 +48,11 @@ def load_user(user_id):
     return User.get(user_id)
 
 
-# Create Flask route
+# Create Flask route for login
 @app.route('/')
 def index():
     if current_user.is_authenticated:
-        return render_template("getLeague.html", user_id=current_user.id)
+        return render_template("landing.html", user_id=current_user.id)
     else:
         return render_template("index.html")
 
@@ -115,12 +120,12 @@ def callback():
         # Send user back to index page
         return redirect(url_for("index"))
 
-@app.route('/getLeague')
+@app.route('/landing')
 #@login_required
 def getLeague():
-    return render_template("getLeague.html")
+    return render_template("landing.html")
 
-@app.route("/getLeague/leagueCallback", methods=['GET', 'POST'])
+@app.route("/landing/leagueCallback", methods=['GET', 'POST'])
 #@login_required
 def leagueCallback():
     user_league = request.form["user_league"]
@@ -132,15 +137,7 @@ def leagueCallback():
 def getFranchise():
     user_league = session.get("user_league")
 
-    # Get Franchises in the league
-    urlString = f"https://www54.myfantasyleague.com/2022/export?TYPE=league&L={user_league}"
-    response = requests.get(urlString)
-    soup = BeautifulSoup(response.content,'xml')
-    data = []
-    franchises = soup.find_all('franchise')
-    for i in range(len(franchises)):
-        rows = [franchises[i].get("id"), franchises[i].get("name")]
-        data.append(rows)
+    franchises = get_league(user_league)
 
     return render_template("getFranchise.html", franchise_list=data)
 
@@ -161,122 +158,10 @@ def landing():
 @app.route("/allPlayers")
 #@login_required
 def allPlayers():
-    player_df = get_df("player_df")
-    return render_template("allPlayers.html", tables=[player_df.to_html(classes='data')], titles=player_df.columns.values)
-
-@app.route('/compareFranchises')
-#@login_required
-def compareFranchises():
-    user_league = session.get("user_league")
-
-    # Get Franchises in the league
-    urlString = f"https://www54.myfantasyleague.com/2022/export?TYPE=league&L={user_league}"
-    response = requests.get(urlString)
-    soup = BeautifulSoup(response.content,'xml')
-    data = []
-    franchises = soup.find_all('franchise')
-    for i in range(len(franchises)):
-        rows = [franchises[i].get("id"), franchises[i].get("name")]
-        data.append(rows)
-    franchise_df = pd.DataFrame(data)
-    franchise_df.columns=['FranchiseID','FranchiseName']
-    franchise_df = franchise_df.append({"FranchiseID":"FA", "FranchiseName":"Free Agent"}, ignore_index=True)
-
-    # Get franchise rosters
-    urlString = f"https://www54.myfantasyleague.com/2022/export?TYPE=rosters&L={user_league}"
-    response = requests.get(urlString)
-    soup = BeautifulSoup(response.content,'xml')
-    data = []
-    franchises = soup.find_all('franchise')
-    for i in range(0,len(franchises)):
-        current_franchise = franchises[i].find_all('player')
-        for j in range(0,len(current_franchise)):
-            rows = [franchises[i].get("id"), franchises[i].get("week"), current_franchise[j].get("id"), current_franchise[j].get("status")]
-            data.append(rows)
-    rosters_df = pd.DataFrame(data)
-
-    # Get Free Agents
-    urlString = f"https://www54.myfantasyleague.com/2022/export?TYPE=freeAgents&L={user_league}"
-    response = requests.get(urlString)
-    soup = BeautifulSoup(response.content,'xml')
-    data = []
-    freeAgents = soup.find_all('player')
-    for i in range(len(freeAgents)):
-        rows = ["FA", "", freeAgents[i].get("id"), "Free Agent"]
-        data.append(rows)
-    fa_df = pd.DataFrame(data)
-    rosters_df = rosters_df.append(fa_df)
-    rosters_df.columns=['FranchiseID','Week','PlayerID','RosterStatus']
-
-    # Get all players, sharkRank, and ADP
-    player_df = get_df("player_df")
-
-    # Merge all dfs
-    complete = player_df.merge(rosters_df, on='PlayerID', how='left').merge(franchise_df[['FranchiseID', 'FranchiseName']], on='FranchiseID', how='left')
-    complete['FranchiseID'].fillna("FA", inplace=True)
-    complete['FranchiseName'].fillna("Free Agent", inplace=True)
-    complete['RosterStatus'].fillna("Free Agent", inplace=True)
-    complete = complete.sort_values(by=['SharkRank'])
-    complete.reset_index(inplace=True, drop=True)
-
-    # Split complete df by player position
-    qbs = complete[complete['Position'] == "QB"]
-    qbs.reset_index(inplace=True, drop=True)
-    rbs = complete[complete['Position'] == "RB"]
-    rbs.reset_index(inplace=True, drop=True)
-    wrs = complete[complete['Position'] == "WR"]
-    wrs.reset_index(inplace=True, drop=True)
-    tes = complete[complete['Position'] == "TE"]
-    tes.reset_index(inplace=True, drop=True)
-    pks = complete[complete['Position'] == "PK"]
-    pks.reset_index(inplace=True, drop=True)
-    defs = complete[complete['Position'] == "Def"]
-    defs.reset_index(inplace=True, drop=True)
-
-    # Roster Builder logic
-    qbs_top = qbs.sort_values(by='Projection_Relative', ascending=False, ignore_index=True).groupby('FranchiseName').head(1)
-    rbs_top = rbs.sort_values(by='Projection_Relative', ascending=False, ignore_index=True).groupby('FranchiseName').head(2)
-    wrs_top = wrs.sort_values(by='Projection_Relative', ascending=False, ignore_index=True).groupby('FranchiseName').head(3)
-    tes_top = tes.sort_values(by='Projection_Relative', ascending=False, ignore_index=True).groupby('FranchiseName').head(2)
-
-    qbs_remainder = qbs[~qbs['PlayerID'].isin(qbs_top['PlayerID'])].groupby('FranchiseName').head(1)
-    rbs_remainder = rbs[~rbs['PlayerID'].isin(rbs_top['PlayerID'])].groupby('FranchiseName').head(3)
-    wrs_remainder = wrs[~wrs['PlayerID'].isin(wrs_top['PlayerID'])].groupby('FranchiseName').head(3)
-    tes_remainder = tes[~tes['PlayerID'].isin(tes_top['PlayerID'])].groupby('FranchiseName').head(3)
-
-    remainder = pd.concat([qbs_remainder, rbs_remainder, wrs_remainder, tes_remainder])
-
-    top_remainders = remainder.sort_values(by='Projection_Absolute', ascending=False, ignore_index=True).groupby('FranchiseName').head(3)
-
-    players_onthefield = pd.concat([qbs_top, rbs_top, wrs_top, tes_top, top_remainders])
-    players_onthefield = players_onthefield.sort_values(by='Projection_Absolute', ascending=False, ignore_index=True)
-
-    fran_rank = players_onthefield.groupby('FranchiseName').sum().sort_values(by='Projection_Absolute', ascending=False)
-
-    sorter = fran_rank.index
-
-    players_onthefield.FranchiseName = players_onthefield.FranchiseName.astype("category")
-    players_onthefield.FranchiseName.cat.set_categories(sorter, inplace=True)
-    players_onthefield.sort_values(["FranchiseName"], inplace=True)
-
-    # Create bar chart
-    fig = px.bar(players_onthefield, 
-                x="FranchiseName", 
-                y="Projection_Relative", 
-                color="Position", 
-                text='Name', 
-                color_discrete_map={
-                    "RB": "#062647", #blue #1033a6 #0c2987 1033a6 062647
-                    "TE": "#43B3AE", #teal #02687b #038097 1295ad 43B3AE
-                    "WR": "#621B74", #purple #4f22bc #643fc1 643fc1 621B74
-                    "QB": "#ffa524"}, #gold #f5d000 f5d000 ffa524
-                category_orders={
-                    "Position": ["RB", "QB", "WR", "TE"]}
-                )
-    fig.update_layout(barmode='stack', xaxis={'categoryorder':'total descending'})
-
-    graphJSON = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
-    return render_template('compareFranchises.html', graphJSON=graphJSON)
+    player_df = db.get_df("player_df")
+    tables = [player_df.to_html(classes='data')]
+    titles=player_df.columns.values
+    return render_template("allPlayers.html", tables=tables, titles=titles)
 
 @app.route('/waiverWire', methods=['GET', 'POST'])
 #@login_required
