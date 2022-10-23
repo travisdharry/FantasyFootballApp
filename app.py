@@ -235,10 +235,10 @@ def waiverWire():
     return render_template("waiverWire.html", tables=[complete.to_html(classes='data')], titles=complete.columns.values)
 
 
-#@app.route('/compareFranchises2')
+#@app.route('/compareFranchises')
 #@login_required
 def compareFranchises():
-    user_league = "53906"
+    user_league = session.get('user_league', None)
 
     # Get Franchises in the league
     franchise_df = mfl.get_franchises(user_league)
@@ -261,13 +261,13 @@ def compareFranchises():
     complete['rosterStatus'].fillna("Free Agent", inplace=True)
 
     # Get info on available slots from MFL site
-    posmax = {"QB":2, "RB":5, "WR":6, "TE":5, "PK":2, "DF":2}
-    posmin = {"QB":1, "RB":2, "WR":2, "TE":2, "PK":2, "DF":2}
+    posMax = {"QB":2, "RB":5, "WR":6, "TE":5, "PK":2, "DF":2}
+    posMin = {"QB":1, "RB":2, "WR":2, "TE":2, "PK":2, "DF":2}
     totalStarters = 15
     predMethod = "pred"
 
     # Select starters
-    df = analysis.starterSelector(complete, predMethod, totalStarters, posmax, posmin)
+    df = analysis.starterSelector(complete, how=predMethod, startersMax=totalStarters, posMax=posMax, posMin=posMin)
 
     # Find the lowest scoring player on the field and set them as the low bar
     for x in ["QB", "RB", "WR", "TE", "PK", "DF"]:
