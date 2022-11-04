@@ -288,87 +288,36 @@ def liveScoring():
     user_league = session.get("user_league")
 
     # Get MFL scoring data
-    liveScores = get_mfl_liveScoring(user_league)
+    liveScores = mfl.get_liveScoring(user_league)
     # Get Franchises in the league
-    franchises = get_mfl_league(user_league)
-    # Get all players, sharkRank, and ADP
-    predictions = get_df("predictions")
+    franchises = mfl.get_franchises(user_league)
+    # Get all players and predictions
+    predictions = db.get_df("predictions")
 
-    # merge predictions, franchises, and liveScores
-    merged = liveScores.merge(franchises, how='left', on='franchiseID').merge(predictions, how='left', on='id_mfl')
-    # Clean
-    merged['liveScore'] = merged.liveScore.astype('float64')
-    merged['secondsRemaining'] = merged.secondsRemaining.astype('float64')
+    # Merge: merge liveScores, franchises, and predictions
+    df = liveScores.merge(franchises, how='left', on='franchiseID').merge(predictions, how='left', on='id_mfl')
 
-    # calculate scoreRemaining
-    merged['weeklyPred'] = merged['pred'] / 17
-    def calcScoreRemaining(row):
-        result = ((row['weeklyPred']) * (row['secondsRemaining'] / 3600)) + row['liveScore']
-        return result
-    merged['scoreRemaining'] = merged.apply(calcScoreRemaining, axis=1)
-    # Claculate difference between projection/actual
-    merged['diff'] = merged.scoreRemaining - merged.weeklyPred
-    # Normalize difference
-    merged.loc[merged['diff']>20, 'diff'] = 20
-    merged.loc[merged['diff']<-20, 'diff'] = -20
-    merged['scaled'] = round(merged['diff'] * 255 / 20, 0)
-    merged.dropna(inplace=True)
-    merged['scaled'] = merged['scaled'].astype('int')
-    # Set colors for chart
-    def colorPicker(row):
-        scalar = row['scaled']
-        if scalar >= 0:
-            red = 255 - scalar
-            green = 255
-            blue = 255 - scalar
-        else:
-            red = 255 
-            green = 255 + scalar
-            blue = 255 + scalar
-        color = f'rgb({red},{green},{blue})'
-        return color
-    merged['color'] = merged.apply(colorPicker, axis=1)
-    # chart
-    players_onthefield = merged.loc[merged.status=="starter"]
-    players_onthefield = players_onthefield.sort_values(by='scoreRemaining', ascending=False, ignore_index=True)
-    fran_rank = players_onthefield.groupby('franchiseName').sum().sort_values(by='scoreRemaining', ascending=False)
-    sorter = fran_rank.index
-    players_onthefield.franchiseName = players_onthefield.franchiseName.astype("category")
-    players_onthefield.franchiseName.cat.set_categories(sorter, inplace=True)
-    players_onthefield.sort_values(["franchiseName"], inplace=True)
-    color_discrete_map = dict(zip(players_onthefield.id_mfl, players_onthefield.color))
-    # Create bar chart
-    figLive = px.bar(players_onthefield, 
-                x="franchiseName", 
-                y="scoreRemaining", 
-                color="player", 
-                color_discrete_sequence=list(players_onthefield['color']),
-                category_orders={
-                    "pos": ["QB", "RB", "WR", "TE", "PK", "DF"]},
-                text='player', 
-                hover_name="player",
-                hover_data={
-                    'scoreRemaining':True, 'weeklyPred':True, 'scaled':True,
-                    'player':False, 'pos':False, 'franchiseName':False
-                    },
-                labels={
-                    "franchiseName":"Franchise",
-                    "predRelative":"Player Value",
-                    "pred":"ChopBlock Prediction",
-                    "sharkAbsolute":"FantasySharks Prediction",
-                    "adpAbsolute":"ADP-Based Prediction"
-                }
-                )
-    figLive.update_layout(
-                barmode='stack', 
-                xaxis={'categoryorder':'total descending'},
-                plot_bgcolor='rgba(0,0,0,0)',
-                title="ChopBlock Predictions",
-                font_family="Skia",
-                showlegend=False
-                )
-    graphJSON_live = json.dumps(figLive, cls=plotly.utils.PlotlyJSONEncoder)
-    return render_template('liveScoring.html', graphJSON=graphJSON_live)
+    # Clean: convert to float data types
+    df['liveScore'] = df['liveScore'].astype('float64')
+    df['secondsRemaining'] = df['secondsRemaining'].astype('float64')
+
+    # Filter:
+    df = df.loc[df['status']=="starter"]
+
+    # Analyze:
+    # Divide the player's annual prediction by the number of weeks (17) to get a weekly prediction
+    df['weeklyPred'] = df['pred'] / 17
+    # Calculate each player's expected score at the end of the game
+    df['expectedLiveScore'] = df.apply(analysis.expectedLiveScore, axis=1)
+    # Set colors for chart 
+    df['color'] = df.apply(analysis.colorPicker, axis=1)
+
+    # Visualize:
+    fig = viz.liveScoring(df)
+    # Encode in JSON format
+    graphJSON = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+    # Render html template in flask
+    return render_template('liveScoring.html', graphJSON=graphJSON)
 
 
 @app.route("/logout")
