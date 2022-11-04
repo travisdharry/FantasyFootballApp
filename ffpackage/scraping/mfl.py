@@ -71,11 +71,16 @@ def get_freeAgents(user_league):
 
 # Retrieve live score info from My Fantasy League website
 def get_liveScoring(user_league):
+    # Connect to MFL API, which responds with data in xml format
     urlString = f"https://www54.myfantasyleague.com/2022/export?TYPE=liveScoring&DETAILS=1&L={user_league}"
     response = requests.get(urlString)
+    # Parse xml response with BeautifulSoup
     soup = BeautifulSoup(response.content,'xml')
+    # Create empty list to hold data during loop
     data = []
+    # Tell BeautifulSoup to find each element in the xml structure
     matchups = soup.find_all('matchup')
+    # Loop through the rows to get the data within, then append to the empty data list
     for k in range(len(matchups)):
         franchises = matchups[k].find_all('franchise')
         for i in range(0,len(franchises)):
@@ -83,6 +88,7 @@ def get_liveScoring(user_league):
             for j in range(0,len(current_franchise)):
                 rows = [k, franchises[i].get("id"), current_franchise[j].get("id"), current_franchise[j].get("score"), current_franchise[j].get("gameSecondsRemaining"), current_franchise[j].get("status")]
                 data.append(rows)
+    # Convert to pandas dataframe
     df = pd.DataFrame(data)
     df.columns = ["matchup", "franchiseID", "id_mfl", "liveScore", "secondsRemaining", "status"]
     return df
