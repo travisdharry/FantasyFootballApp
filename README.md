@@ -26,3 +26,15 @@ X Franchise Strength/Weakness Position Heatmap
 X Slider: Adjust Year Planning to Win Championship
 - Make My Own Predictions
 - Adjust for Kick Returners and Punt Returners
+
+
+
+
+## Notes on Webscraping
+When the local version of Chrome updates, will have to update Chromedriver to compensate.
+Download new version of Chromedriver:
+    https://chromedriver.chromium.org/downloads
+Unzip and save .exe file in 'Applications'
+Disable "Developer Not Verified":
+    System Preferences > Security & Privacy > "Allow Anyway"
+Running the code will generate a warning. Tell Apple to "Open" and it will now run Chromedriver

@@ -22,6 +22,24 @@ def get_players():
     # Convert data list to pandas DataFrame
     df = pd.DataFrame(data)
     df.columns=['id_mfl','playerName', 'pos', 'team']
+    # Clean data
+    ## Select only positions relevant to fantasy football
+    df = df.loc[df['pos'].isin(['QB', 'WR', 'RB', 'TE', 'PK', 'Def'])]
+    ## Clean playerName column
+    # Split "last, first" format names into last names (lplayerName) and first names (fplayerName), then recombine in "first last" format
+    splitNames = df['playerName'].str.split(", ", n=1, expand=True)
+    splitNames.columns = ['lplayerName', 'fplayerName']
+    df.loc[:, 'playerName'] = splitNames['fplayerName'] + " " + splitNames['lplayerName']
+    # Change playerName to all upper case
+    df.loc[:, 'playerName'] = df.loc[:, 'playerName'].str.upper()
+    # Drop all playerName punctuation
+    df.loc[:, 'playerName'] = df.loc[:, 'playerName'].str.replace(".", "")
+    df.loc[:, 'playerName'] = df.loc[:, 'playerName'].str.replace(",", "")
+    df.loc[:, 'playerName'] = df.loc[:, 'playerName'].str.replace("'", "")
+    ## Clean position column
+    df.loc[:, 'pos'] = df.loc[:, 'pos'].replace('Def', 'DF')
+    # Clean Team column
+    df.loc[:, 'team'] = df.loc[:, 'team'].replace('FA*', 'FA')
     return df
 
 # Retrieve franchise info from My Fantasy League website
@@ -178,6 +196,9 @@ def get_playerProfiles(idList):
     # Change column names
     df.columns = ['id_mfl', 'dob']
     return df
+
+
+
 
 ## Not yet utilized
 # Retrieve projected score info from My Fantasy League website
