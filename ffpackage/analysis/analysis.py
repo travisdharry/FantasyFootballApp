@@ -1,4 +1,6 @@
 import pandas as pd
+from datetime import datetime, date
+from dateutil.relativedelta import *
 
 # Find the best possible combination of starters for each franchise
 def starterSelector(df, how, startersMax, posMax, posMin):
@@ -57,3 +59,9 @@ def colorPicker(row):
         blue = 255 + scalar
     color = f'rgb({red},{green},{blue})'
     return color
+
+# Calculate player ages using datetime's relativedelta
+def calculate_age(dob):
+    today = date.today()
+    age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+    return age
