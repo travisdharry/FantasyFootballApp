@@ -263,45 +263,11 @@ scrape2_final['team'] = scrape2_final['team'].map(teamDict)
 ### Merge MyFantasyLeague data with scrape2d data
 player_df = scrape1.merge(scrape2_final, how='left', on=['player', 'team'])
 ## Clean merged df
+# Give defenses a position rank since OurLads does not include them
 player_df.loc[player_df['pos_mfl']=='DF', 'posRank'] = "DF1"
-player_df['KR'].fillna("NO", inplace=True)
-player_df['PR'].fillna("NO", inplace=True)
-## Clean posRanks
-player_df['posRank'] = player_df['posRank'].map({
-    'RES1':'RES',
-    'RES2':'RES',
-    'RES3':'RES',
-    'RES4':'RES',
-    'RES5':'RES',
-    'QB1':'QB1', 
-    'QB2':'QB2', 
-    'QB3':'QB3', 
-    'QB4':'QB3',
-    'QB5':'QB3', 
-    'RB1':'RB1', 
-    'RB2':'RB2', 
-    'RB3':'RB3', 
-    'RB4':'RB3', 
-    'RB5':'RB3',
-    'WR1': 'WR1', 
-    'WR2': 'WR2', 
-    'WR3': 'WR3', 
-    'WR4': 'WR3', 
-    'WR5': 'WR3', 
-    'TE1':'TE1', 
-    'TE2':'TE2', 
-    'TE3':'TE3', 
-    'TE4':'TE3', 
-    'TE5':'TE3', 
-    'PK1':'PK1', 
-    'PK2':'PK2', 
-    'PK3':'PK3',
-    'DF1':'DF1'
-    })
-# Create "RES/NO" column
-player_df['RES'] = "NO"
-player_df.loc[player_df['posRank']=="RES", 'RES'] = "RES"
+# Give any players who were not on the OurLads website a rank of 3
 player_df.loc[player_df.posRank.isna(), 'posRank'] = player_df.loc[player_df.posRank.isna(), 'pos_mfl'] + "3"
+# Give any injured reserve players a rank of 3
 player_df.loc[player_df.posRank=="RES", 'posRank'] = player_df.loc[player_df.posRank=="RES", 'pos_mfl'] + "3"
 # Specify all players are in current season
 player_df['season'] = 2022

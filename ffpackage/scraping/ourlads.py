@@ -41,13 +41,13 @@ def scrape_depthcharts():
         )[0]
     # Filter for only the needed columns
     df = df.loc[:, ['Team', 'Pos', 'Player 1', 'Player 2', 'Player 3', 'Player 4', 'Player 5']]
-    # Rename columns of Position Ranks
+    # Rename columns of Position Ranks; limit number of ranks to three
     df = df.rename(columns={
         'Player 1':'1',
         'Player 2':'2',
         'Player 3':'3',
-        'Player 4':'4',
-        'Player 5':'5',
+        'Player 4':'3',
+        'Player 5':'3',
     })
     # Filter only relevant positions
     posList = ['LWR', 'RWR', 'SWR', 'TE', 'QB', 'RB', 'PK', 'PR', 'KR', 'RES']
@@ -83,16 +83,18 @@ def scrape_depthcharts():
     # Clean the Position column
     # Generalize wide receiver specific positions to WR
     df['pos'].replace(["LWR", "RWR", "SWR"], "WR", inplace=True)
-    # Identify punt returners and kick returners, then drop those rows from the df
+    # Identify punt returners, kick returners, and injuredReserve, then drop those rows from the df
     prs = df.loc[df['pos']=='PR']
     krs = df.loc[df['pos']=='KR']
+    res = df.loc[df['pos']=='RES']
     df.loc[df['id_ol'].isin(prs['id_ol']), 'PR'] = "YES"
     df.loc[df['id_ol'].isin(krs['id_ol']), 'KR'] = "YES"
+    df.loc[df['id_ol'].isin(res['id_ol']), 'RES'] = "YES"
     df = df.loc[(df['pos']!="PR") & (df['pos']!="PR")]
-    df['PR'].fillna("NO", inplace=True)
-    df['KR'].fillna("NO", inplace=True)
     # Clean the posRank column
     df['posRank'] = df['pos'] + df['posRank']
+    # Drop the id column
+    df = df.drop(columns=['id_ol', 'pos'])
 
     return df
 
