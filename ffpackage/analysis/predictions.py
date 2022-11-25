@@ -15,15 +15,15 @@ def makePredictions(df, pos):
     modelPath = f'../models/rfmodel_{pos}1.joblib'
     # Specify column names for features and labels
     featureColumns = [
-        'week', 'age', 
-        'passA_curr', 'passC_curr', 'passY_curr', 'passT_curr', 'passI_curr', 'pass2_curr', 
-        'rushA_curr', 'rushY_curr', 'rushT_curr', 'rush2_curr', 
-        'recC_curr', 'recY_curr', 'recT_curr', 'rec2_curr', 'fum_curr', 
-        'XPA_curr', 'XPM_curr', 'FGA_curr', 'FGM_curr', 'FG50_curr', 
-        'defSack_curr', 'defI_curr', 'defSaf_curr', 'defFum_curr', 'defBlk_curr', 'defT_curr', 
-        'defPtsAgainst_curr', 'defPassYAgainst_curr', 'defRushYAgainst_curr', 'defYdsAgainst_curr', 
-        'gamesPlayed_curr', 
-        'gamesPlayed_prior1', 
+        'week', 'age', 'pos', 'posRank', # basic player info
+        'passA_curr', 'passC_curr', 'passY_curr', 'passT_curr', 'passI_curr', 'pass2_curr', # passing
+        'rushA_curr', 'rushY_curr', 'rushT_curr', 'rush2_curr', # rushing
+        'recC_curr', 'recY_curr', 'recT_curr', 'rec2_curr', 'fum_curr', # receiving
+        'XPA_curr', 'XPM_curr', 'FGA_curr', 'FGM_curr', 'FG50_curr', # punt/kicking
+        'defSack_curr', 'defI_curr', 'defSaf_curr', 'defFum_curr', 'defBlk_curr', 'defT_curr', # defensive
+        'defPtsAgainst_curr', 'defPassYAgainst_curr', 'defRushYAgainst_curr', 'defYdsAgainst_curr', # opponent
+        'gamesPlayed_curr', # games played
+        'gamesPlayed_prior1', # games played
         'passA_prior1', 'passC_prior1', 'passY_prior1', 'passT_prior1', 'passI_prior1', 'pass2_prior1', 
         'rushA_prior1', 'rushY_prior1', 'rushT_prior1', 'rush2_prior1', 
         'recC_prior1', 'recY_prior1', 'recT_prior1', 'rec2_prior1', 'fum_prior1', 
@@ -40,8 +40,7 @@ def makePredictions(df, pos):
         'defSack_curr_opp', 'defI_curr_opp', 'defSaf_curr_opp', 'defFum_curr_opp', 'defBlk_curr_opp', 'defT_curr_opp', 
         'defPtsAgainst_curr_opp', 'defPassYAgainst_curr_opp', 'defRushYAgainst_curr_opp', 'defYdsAgainst_curr_opp', 
         'defSack_prior1_opp', 'defI_prior1_opp', 'defSaf_prior1_opp', 'defFum_prior1_opp', 'defBlk_prior1_opp', 'defT_prior1_opp', 
-        'defPtsAgainst_prior1_opp', 'defPassYAgainst_prior1_opp', 'defRushYAgainst_prior1_opp', 'defYdsAgainst_prior1_opp', 
-        'pos', 'posRank'
+        'defPtsAgainst_prior1_opp', 'defPassYAgainst_prior1_opp', 'defRushYAgainst_prior1_opp', 'defYdsAgainst_prior1_opp'
     ]
     labelColumns = [
         'passA', 'passC', 'passY', 'passT', 'passI', 'pass2', 
@@ -74,8 +73,8 @@ def makePredictions(df, pos):
     df = df.reset_index(drop=True)
 
     # Select features
-    X = df[featureColumns]
     header = df[headerColumns]
+    X = df[featureColumns]
 
     # Encode categorical features
     X = pd.get_dummies(X, columns = ['pos', 'posRank'])
@@ -85,6 +84,10 @@ def makePredictions(df, pos):
     for rank in [dummy1, dummy2, dummy3]:
         if rank not in list(X.columns):
             X[rank] = 0
+    # Drop this line once the predicitive model has been updated. Also drop the line in scheduler.py
+    # (Originally the model did not include TE3s)
+    if "posRank_TE3" in X.columns:
+        X = X.drop(columns=['posRank_TE3', 'posRank_TE2'])
 
     #load saved model
     regressor = load(modelPath)
@@ -99,35 +102,35 @@ def makePredictions(df, pos):
     return y_pred
 
 
-# Calculate FANTASY scores
-def
-    # Define scoring multiplier based on league settings
-    multiplier = [
-        0,0,.04,4,-2,2,.1,.1,6,2,.25,.1,6,2,-2,0,1,0,3,5,1,2,2,2,1.5,6,0,0,0,0,1,1
-    ]
-    # Define bins for defensive PointsAgainst and YardsAgainst based on MFL scoring categories
-    binList_defPts = [-5,0,6,13,17,21,27,34,45,59,99]
-    binList_defYds = [0,274,324,375,425,999]
-    # Define correlating scores for defensive PointsAgainst and YardsAgainst based on league settings
-    ptList_defPts = [10,8,7,5,3,2,0,-1,-3,-5]
-    ptList_defYds = [5,2,0,-2,-5]
-    # Bin and cut the defensive predictions
-    y_pred['defPtsBin'] = pd.cut(y_pred['defPtsAgainst'], bins=binList_defPts, include_lowest=True, labels=ptList_defPts)
-    y_pred['defYdsBin'] = pd.cut(y_pred['defYdsAgainst'], bins=binList_defYds, include_lowest=True, labels=ptList_defYds)
-    # Merge predictions with header columns so we know the players' position
-    a_pred = header.merge(y_pred, left_index=True, right_index=True)
-    # Assign value of zero to all non-defensive players' bins
-    a_pred.loc[a_pred['pos']!='DF', 'defPtsBin'] = 0
-    a_pred.loc[a_pred['pos']!='DF', 'defYdsBin'] = 0
-    # Drop the header columns again
-    a_pred = a_pred.drop(columns=['id_mfl', 'week','season','team','playerName','age','sharkRank','adp','pos','KR','PR','RES','posRank','opponent'])
-    # Create function to apply scoring multiplier
-    def multer(row):
-        return row.multiply(multiplier)
-    # Apply scoring multiplier to predictions
-    c = a_pred.apply(multer, axis=1)
-    c = c.apply(np.sum, axis=1)
-    c = pd.DataFrame(c, columns=['pred'])
+# # Calculate FANTASY scores
+# def
+#     # Define scoring multiplier based on league settings
+#     multiplier = [
+#         0,0,.04,4,-2,2,.1,.1,6,2,.25,.1,6,2,-2,0,1,0,3,5,1,2,2,2,1.5,6,0,0,0,0,1,1
+#     ]
+#     # Define bins for defensive PointsAgainst and YardsAgainst based on MFL scoring categories
+#     binList_defPts = [-5,0,6,13,17,21,27,34,45,59,99]
+#     binList_defYds = [0,274,324,375,425,999]
+#     # Define correlating scores for defensive PointsAgainst and YardsAgainst based on league settings
+#     ptList_defPts = [10,8,7,5,3,2,0,-1,-3,-5]
+#     ptList_defYds = [5,2,0,-2,-5]
+#     # Bin and cut the defensive predictions
+#     y_pred['defPtsBin'] = pd.cut(y_pred['defPtsAgainst'], bins=binList_defPts, include_lowest=True, labels=ptList_defPts)
+#     y_pred['defYdsBin'] = pd.cut(y_pred['defYdsAgainst'], bins=binList_defYds, include_lowest=True, labels=ptList_defYds)
+#     # Merge predictions with header columns so we know the players' position
+#     a_pred = header.merge(y_pred, left_index=True, right_index=True)
+#     # Assign value of zero to all non-defensive players' bins
+#     a_pred.loc[a_pred['pos']!='DF', 'defPtsBin'] = 0
+#     a_pred.loc[a_pred['pos']!='DF', 'defYdsBin'] = 0
+#     # Drop the header columns again
+#     a_pred = a_pred.drop(columns=['id_mfl', 'week','season','team','playerName','age','sharkRank','adp','pos','KR','PR','RES','posRank','opponent'])
+#     # Create function to apply scoring multiplier
+#     def multer(row):
+#         return row.multiply(multiplier)
+#     # Apply scoring multiplier to predictions
+#     c = a_pred.apply(multer, axis=1)
+#     c = c.apply(np.sum, axis=1)
+#     c = pd.DataFrame(c, columns=['pred'])
 
-    # Merge header columns with predictions
-    WRdf = header.merge(c, left_index=True, right_index=True)
+#     # Merge header columns with predictions
+#     WRdf = header.merge(c, left_index=True, right_index=True)

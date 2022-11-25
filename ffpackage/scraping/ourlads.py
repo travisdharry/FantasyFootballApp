@@ -90,7 +90,7 @@ def scrape_depthcharts():
     df.loc[df['id_ol'].isin(prs['id_ol']), 'PR'] = "YES"
     df.loc[df['id_ol'].isin(krs['id_ol']), 'KR'] = "YES"
     df.loc[df['id_ol'].isin(res['id_ol']), 'RES'] = "YES"
-    df = df.loc[(df['pos']!="PR") & (df['pos']!="PR")]
+    df = df.loc[(df['pos']!="PR") & (df['pos']!="KR")]
     # Clean the posRank column
     df['posRank'] = df['pos'] + df['posRank']
     # Drop the id column
