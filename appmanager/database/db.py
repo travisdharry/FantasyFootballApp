@@ -2,6 +2,7 @@
 import os
 import pandas as pd
 import psycopg2
+from sqlalchemy import create_engine
 
 # Find environment variables
 DATABASE_URL = os.environ.get("DATABASE_URL", None)
@@ -10,18 +11,47 @@ if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 # query the database, return a dataframe
-def get_df(df):
+def read_db(tableName):
+    # Ensure there are no pre-existing connections
     connection = False
     try:
-        conn = psycopg2.connect(DATABASE_URL, sslmode='require')
-        cursor = conn.cursor()
-        query = f'SELECT * FROM {df}'
+        # Connect to database
+        connection = psycopg2.connect(DATABASE_URL, sslmode='require')
+        cursor = connection.cursor()
+        # Select the table
+        query = f'SELECT * FROM {tableName}'
         cursor.execute(query)
-        result = pd.read_sql(query, conn)
+        # Convert the response to a pandas df
+        result = pd.read_sql(query, connection)
         return result
+    # If there is an error interacting with the db, raise the error
     except (Exception, Error) as error:
-        print(error)
+        raise error
     finally:
+        # If the connection was opened, close it
+        if connection:
+            cursor.close()
+            connection.close()
+
+# Write a new table to the database
+def write_df(df, tableName, dataDef):
+    # Ensure there are no pre-existing connections
+    connection = False
+    try:
+        # Connect to database
+        connection = psycopg2.connect(DATABASE_URL, sslmode='require')
+        engine = create_engine(DATABASE_URL)
+        cursor = connection.cursor()
+        # Create table if it does not already exist
+        cursor.execute(f'CREATE TABLE IF NOT EXISTS {tableName}({dataDef})')
+        connection.commit()
+        # Populate table with data
+        df.to_sql(tableName, engine, if_exists='replace', index = False)
+    # If there is an error interacting with the db, raise the error
+    except (Exception, Error) as error:
+        raise error
+    finally:
+        # If the connection was opened, close it
         if connection:
             cursor.close()
             connection.close()
