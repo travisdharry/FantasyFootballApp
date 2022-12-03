@@ -66,32 +66,25 @@ def calculate_age(dob):
     age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
     return age
 
-# # Calculate FANTASY scores from predicted NFL stats
-# def
-#     # Define scoring multiplier based on league settings
-#     multiplier = [
-#         0,0,.04,4,-2,2,.1,.1,6,2,.25,.1,6,2,-2,0,1,0,3,5,1,2,2,2,1.5,6,0,0,0,0,1,1
-#     ]
-#     # Define bins for defensive PointsAgainst and YardsAgainst based on MFL scoring categories
-#     binList_defPts = [-5,0,6,13,17,21,27,34,45,59,99]
-#     binList_defYds = [0,274,324,375,425,999]
-#     # Define correlating scores for defensive PointsAgainst and YardsAgainst based on league settings
-#     ptList_defPts = [10,8,7,5,3,2,0,-1,-3,-5]
-#     ptList_defYds = [5,2,0,-2,-5]
-#     # Bin and cut the defensive predictions
-#     y_pred['defPtsBin'] = pd.cut(y_pred['defPtsAgainst'], bins=binList_defPts, include_lowest=True, labels=ptList_defPts)
-#     y_pred['defYdsBin'] = pd.cut(y_pred['defYdsAgainst'], bins=binList_defYds, include_lowest=True, labels=ptList_defYds)
-#     # Merge predictions with header columns so we know the players' position
-#     a_pred = header.merge(y_pred, left_index=True, right_index=True)
-#     # Assign value of zero to all non-defensive players' bins
-#     a_pred.loc[a_pred['pos']!='DF', 'defPtsBin'] = 0
-#     a_pred.loc[a_pred['pos']!='DF', 'defYdsBin'] = 0
-#     # Drop the header columns again
-#     a_pred = a_pred.drop(columns=['id_mfl', 'week','season','team','playerName','age','sharkRank','adp','pos','KR','PR','RES','posRank','opponent'])
-#     # Create function to apply scoring multiplier
-#     def multer(row):
-#         return row.multiply(multiplier)
+# Calculate FANTASY points customized based on league-specific scoring rules
+def calculate_ffPoints(df, offPoints_dict, binList_defPts, binList_defYds, ptList_defPts, ptList_defYds):
+    # Bin and cut the defensive predictions
+    df['defPtsBin'] = pd.cut(df['defPtsAgainst'], bins=binList_defPts, include_lowest=True, labels=ptList_defPts)
+    df['defYdsBin'] = pd.cut(df['defYdsAgainst'], bins=binList_defYds, include_lowest=True, labels=ptList_defYds)
+
+    # Assign value of zero to all non-defensive players' bins
+    df.loc[df['pos']!='DF', 'defPtsBin'] = 0
+    df.loc[df['pos']!='DF', 'defYdsBin'] = 0
+    # Create function to apply scoring multiplier
+    ##########################################################
+    df[[]] = df[[]].mul(offPoints_dict)
 #     # Apply scoring multiplier to predictions
 #     c = a_pred.apply(multer, axis=1)
 #     c = c.apply(np.sum, axis=1)
 #     c = pd.DataFrame(c, columns=['pred'])
+
+
+    # Merge predictions with header columns so we know the players' position
+    # a_pred = header.merge(df, left_index=True, right_index=True)
+        # Drop the header columns again
+#     a_pred = a_pred.drop(columns=['id_mfl', 'week','season','team','playerName','age','sharkRank','adp','pos','KR','PR','RES','posRank','opponent'])

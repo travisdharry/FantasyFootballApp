@@ -173,7 +173,7 @@ def franchiseCallback():
 #@login_required
 def allPlayers():
     # get all player info that is stored in the app's database
-    player_df = db.get_df("player_df")
+    player_df = db.read_db("player_df")
     # convert to html tables
     tables = [player_df.to_html(classes='data')]
     titles=player_df.columns.values
@@ -201,7 +201,7 @@ def waiverWire():
     rosters_df = pd.concat([rosters_df, freeAgent_df], axis=0)
 
     # Get all players, sharkRank, and ADP from the app's database
-    player_df = db.get_df("predictions")
+    player_df = db.read_db("predictions")
 
     # Merge all dfs
     waiverPlayers = player_df.merge(rosters_df, on='id_mfl', how='left').merge(franchise_df[['franchiseID', 'franchiseName']], on='franchiseID', how='left')
@@ -241,7 +241,7 @@ def compareFranchises():
     # Get franchise rosters
     rosteredPlayers = mfl.get_rosters(user_league)
     # Get all players, sharkRank, and ADP
-    predictions = db.get_df("predictions")
+    predictions = db.read_db("predictions")
 
     # Merge all dfs
     rosteredPlayers = predictions.merge(rosteredPlayers, on='id_mfl', how='left').merge(franchise_df[['franchiseID', 'franchiseName', 'franchiseAbbrev']], on='franchiseID', how='left')
@@ -285,7 +285,7 @@ def liveScoring():
     # Get Franchises in the league
     franchises = mfl.get_franchises(user_league)
     # Get all players and predictions
-    predictions = db.get_df("predictions")
+    predictions = db.read_db("predictions")
 
     # Merge: merge liveScores, franchises, and predictions
     liveScores = liveScores.merge(franchises, how='left', on='franchiseID').merge(predictions, how='left', on='id_mfl')

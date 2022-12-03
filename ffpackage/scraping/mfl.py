@@ -83,6 +83,7 @@ def get_rosters(user_league, user_franchise=""):
     # Convert to pandas dataframe
     df = pd.DataFrame(data)
     df.columns=['franchiseID','week', 'id_mfl', 'rosterStatus']
+    df['week'] = pd.to_numeric(df['week'],errors='coerce')
     return df
 
 # Retrieve list of Free Agents from My Fantasy League website
@@ -154,26 +155,30 @@ def get_sharkRanks():
 
 # Retrieve average draft pick info
 def get_adp():
-    # Connect to MFL API, which responds with data in xml format
-    urlString = "https://api.myfantasyleague.com/2022/export?TYPE=adp"
-    response = requests.get(urlString)
-    # Parse xml response with BeautifulSoup
-    soup = BeautifulSoup(response.content,'xml')
-    # Create empty list to hold data during loop
-    data = []
-    # Tell BeautifulSoup to find each element in the xml structure
-    players = soup.find_all('player')
-    # Loop through the rows to get the data within, then append to the empty data list
-    for i in range(len(players)):
-        rows = [players[i].get("id"), players[i].get("averagePick")]
-        data.append(rows)
-    # Convert to pandas dataframe
-    df = pd.DataFrame(data)
-    # Change column names
-    df.columns=['id_mfl','adp']
-    # Set datatype
-    df['adp'] = df['adp'].astype('float32')
-    return df
+    try:
+        # Connect to MFL API, which responds with data in xml format
+        urlString = "https://api.myfantasyleague.com/2022/export?TYPE=adp"
+        response = requests.get(urlString)
+        # Parse xml response with BeautifulSoup
+        soup = BeautifulSoup(response.content,'xml')
+        # Create empty list to hold data during loop
+        data = []
+        # Tell BeautifulSoup to find each element in the xml structure
+        players = soup.find_all('player')
+        # Loop through the rows to get the data within, then append to the empty data list
+        for i in range(len(players)):
+            rows = [players[i].get("id"), players[i].get("averagePick")]
+            data.append(rows)
+        # Convert to pandas dataframe
+        df = pd.DataFrame(data)
+        # Change column names
+        df.columns=['id_mfl','adp']
+        # Set datatype
+        df['adp'] = df['adp'].astype('float32')
+        return df
+    except:
+        df = pd.DataFrame(columns=['id_mfl','adp'])
+        return df
 
 # Get playerProfiles from My Fantasy League and find their dates of birth
 def get_playerProfiles(idList):
