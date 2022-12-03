@@ -66,19 +66,15 @@ def makePredictions(df, pos):
             'posRank',
             'opponent'
         ]
-
     # Select only one player position
     df = df.loc[df['pos']==pos]
     df = df.dropna()
     df = df.reset_index(drop=True)
-
     # Select features
     header = df[headerColumns]
     X = df[featureColumns]
-
     # Encode categorical features
     X = pd.get_dummies(X, columns = ['pos', 'posRank'])
-
     # Check if there were the correct number of posRanks in the dataset
     # (For instance, if there were no TE3s then this would cause a problem for the predictive model)
     for rank in [dummy1, dummy2, dummy3]:
@@ -87,15 +83,13 @@ def makePredictions(df, pos):
     # The model did not include DF2s or DF3s)
     if "posRank_DF3" in X.columns:
         X = X.drop(columns=['posRank_DF3', 'posRank_DF2'])
-
     #load saved model
     regressor = load(modelPath)
-
     # Run model
     y_pred = regressor.predict(X)
     # Format output score projections as dataframe with named columns, then merge back in with player info
     y_pred = pd.DataFrame(y_pred)
     y_pred.columns = labelColumns
     y_pred = header.merge(y_pred, left_index=True, right_index=True)
-
+    # Return result
     return y_pred
