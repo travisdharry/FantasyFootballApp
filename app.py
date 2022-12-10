@@ -19,11 +19,8 @@ import pandas as pd
 import plotly
 
 # Internal imports
-from ffpackage.scraping import mfl
-from ffpackage.analysis import analysis
-from ffpackage.viz import viz
-from appmanager.database import db
-from appmanager.user import user
+from ffpackage import mfl, analysis, viz
+from appmanager import db, user
 
 # Configuration (These variables are stored as environment variables)
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", None)
