@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 from datetime import datetime, date
 from dateutil.relativedelta import *
 
@@ -67,24 +68,24 @@ def calculate_age(dob):
     return age
 
 # Calculate FANTASY points customized based on league-specific scoring rules
-def calculate_ffPoints(df, offPoints_dict, binList_defPts, binList_defYds, ptList_defPts, ptList_defYds):
-    # Bin and cut the defensive predictions
-    df['defPtsBin'] = pd.cut(df['defPtsAgainst'], bins=binList_defPts, include_lowest=True, labels=ptList_defPts)
-    df['defYdsBin'] = pd.cut(df['defYdsAgainst'], bins=binList_defYds, include_lowest=True, labels=ptList_defYds)
-
-    # Assign value of zero to all non-defensive players' bins
-    df.loc[df['pos']!='DF', 'defPtsBin'] = 0
-    df.loc[df['pos']!='DF', 'defYdsBin'] = 0
-    # Create function to apply scoring multiplier
-    ##########################################################
-    df[[]] = df[[]].mul(offPoints_dict)
-#     # Apply scoring multiplier to predictions
-#     c = a_pred.apply(multer, axis=1)
-#     c = c.apply(np.sum, axis=1)
-#     c = pd.DataFrame(c, columns=['pred'])
-
-
-    # Merge predictions with header columns so we know the players' position
-    # a_pred = header.merge(df, left_index=True, right_index=True)
-        # Drop the header columns again
-#     a_pred = a_pred.drop(columns=['id_mfl', 'week','season','team','playerName','age','sharkRank','adp','pos','KR','PR','RES','posRank','opponent'])
+def calculate_scoresFF(df, scoringDict):
+    ## Multiply the nflStats by the mulitplier row to make dfA
+    multiplier = {key:value["multiplier"] for (key, value) in scoringDict.items()}
+    scoresBase = df.copy()
+    scoresBase.loc[:, scoringDict.keys()] = scoresBase.loc[:, scoringDict.keys()].mul(multiplier)
+    ## Bin and cut the nflStats into dfB
+    scoresBonus = df.copy()
+    for colName in scoringDict.keys():
+        scoresBonus[colName] = pd.cut(
+            scoresBonus[colName], 
+            bins=scoringDict[colName]["bins"], 
+            include_lowest=True, 
+            labels=scoringDict[colName]["labels"]
+        )
+    # Remove defensive scoring bonuses from offensive players
+    defensiveCategories = ['defBlk', 'defT', 'defPtsAgainst', 'defPassYAgainst', 'defRushYAgainst', 'defYdsAgainst']
+    scoresBonus.loc[scoresBonus['pos']!='DF', defensiveCategories] = 0
+    scoresBonus.loc[:, scoringDict.keys()] = scoresBonus.loc[:, scoringDict.keys()].astype('float64')
+    ## Add dfA and dfB
+    df.loc[:, scoringDict.keys()] = scoresBase.loc[:, scoringDict.keys()].add(scoresBonus.loc[:, scoringDict.keys()])
+    return df
