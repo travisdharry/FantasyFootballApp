@@ -69,11 +69,11 @@ def calculate_age(dob):
 
 # Calculate FANTASY points customized based on league-specific scoring rules
 def calculate_scoresFF(df, scoringDict):
-    ## Multiply the nflStats by the mulitplier row to make dfA
+    # Multiply the nflStats by the mulitplier row to make dfA
     multiplier = {key:value["multiplier"] for (key, value) in scoringDict.items()}
     scoresBase = df.copy()
     scoresBase.loc[:, scoringDict.keys()] = scoresBase.loc[:, scoringDict.keys()].mul(multiplier)
-    ## Bin and cut the nflStats into dfB
+    # Bin and cut the nflStats into dfB
     scoresBonus = df.copy()
     for colName in scoringDict.keys():
         scoresBonus[colName] = pd.cut(
@@ -86,6 +86,10 @@ def calculate_scoresFF(df, scoringDict):
     defensiveCategories = ['defBlk', 'defT', 'defPtsAgainst', 'defPassYAgainst', 'defRushYAgainst', 'defYdsAgainst']
     scoresBonus.loc[scoresBonus['pos']!='DF', defensiveCategories] = 0
     scoresBonus.loc[:, scoringDict.keys()] = scoresBonus.loc[:, scoringDict.keys()].astype('float64')
-    ## Add dfA and dfB
-    df.loc[:, scoringDict.keys()] = scoresBase.loc[:, scoringDict.keys()].add(scoresBonus.loc[:, scoringDict.keys()])
-    return df
+    # Add dfA and dfB
+    scoresTotal = scoresBase.loc[:, scoringDict.keys()].add(scoresBonus.loc[:, scoringDict.keys()])
+    # Create summary table 
+    analyzed = df.drop(columns=scoringDict.keys())
+    # Add together scores from each scoring category (sum across the row)
+    analyzed['scoreTotal'] = scoresTotal.sum(axis=1)
+    return analyzed
