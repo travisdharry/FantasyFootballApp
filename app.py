@@ -1,8 +1,9 @@
-# Import dependencies
+##### Setup
+
+### Dependencies
 # Standard python libraries
 import os
 import json
-
 # Third-party libraries
 from flask import Flask, redirect, request, url_for, render_template, session
 from flask_login import (
@@ -13,26 +14,25 @@ from flask_login import (
     login_user,
     logout_user,
 )
+#from flask_cors import CORS
 from oauthlib.oauth2 import WebApplicationClient
 import requests
 import pandas as pd
 import numpy as np
 import plotly
-
 # Internal imports
 from ffpackage import mfl, analysis, viz
 from appmanager import db, user
 
-# Configuration (These variables are stored as environment variables)
+
+
+### Configuration
+# Fetch environment variables
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", None)
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", None)
 GOOGLE_DISCOVERY_URL = ("https://accounts.google.com/.well-known/openid-configuration")
 
-# Create a new Flask instance
-app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY")
-
-# Log in users
+# Login functionality configuration
 # User session management setup using Flask-Login
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -47,7 +47,22 @@ def load_user(user_id):
     return User.get(user_id)
 
 
-# Create Flask route for login
+
+
+
+##### Flask App
+
+### Create a new Flask instance
+app = Flask(__name__)
+# Define Cross-Origin Resource Sharing rules
+#CORS(app)
+# Get secret key to handle writing session data
+app.secret_key = os.environ.get("SECRET_KEY")
+
+
+
+### Login and Logout pages
+# Index route
 @app.route('/')
 def index():
     if current_user.is_authenticated:
@@ -55,7 +70,7 @@ def index():
     else:
         return render_template("index.html")
 
-# If user is not already logged in they are redirected here
+# Redirect user if they are not already logged in
 @app.route("/login")
 def login():
     # Find out what URL to hit for Google login
@@ -120,10 +135,18 @@ def callback():
         # Send user back to index page
         return redirect(url_for("index"))
 
+# Log out user
+@app.route("/logout")
+#@login_required
+def logout():
+    logout_user()
+    return render_template("logout.html")
+
 
 
 ### Landing pages
 
+# Collect league/franchise data from the user 
 @app.route('/landing')
 #@login_required
 def landing():
@@ -139,7 +162,7 @@ def leagueCallback():
     user_league = request.form["user_league"]
     # Save the user's leagueID in the session data
     session['user_league'] = user_league
-    # Send the user to the getFrnachise page to enter their franchise
+    # Send the user to the getFranchise page to enter their franchise
     return redirect(url_for("getFranchise"))
 
 @app.route('/getFranchise', methods=['GET', 'POST'])
@@ -160,7 +183,7 @@ def franchiseCallback():
     # Save the user's franchiseName in the session data
     session['user_franchise'] = user_franchise
     # return the user to the landing page
-    return redirect(url_for("landing"))
+    return redirect(url_for("views"))
 
 
 
@@ -168,22 +191,10 @@ def franchiseCallback():
 ### Views
 
 
-@app.route("/allPlayers")
+@app.route('/predictive', methods=['GET'])
 #@login_required
-def allPlayers():
-    # get all player info that is stored in the app's database
-    player_df = db.read_db("predictions")
-    # convert to html tables
-    tables = [player_df.to_html(classes='data')]
-    titles=player_df.columns.values
-    # Render html
-    return render_template("allPlayers.html", tables=tables, titles=titles)
-
-@app.route('/waiverWire', methods=['GET', 'POST'])
-#@login_required
-def waiverWire():
+def predictive():
     user_league = session.get('user_league', None)
-    user_franchise = session.get('user_franchise', None)
 
     # Get Franchises in the league
     franchise_df = mfl.get_franchises(user_league)
@@ -241,73 +252,84 @@ def waiverWire():
         'defRushYAgainst': {"multiplier":0, "bins":[-np.inf, np.inf], "labels":[0]},
         'defYdsAgainst': {"multiplier":0, "bins":[0,274,324,375,425,999], "labels":[5,2,0,-2,-5]}
     }
-    # Run Calculation function
+    # Calculate predicted fantasy scores based on predicted NFL stats and league-specific scoring rules
     analyzed = analysis.calculate_scoresFF(complete, scoringDict)
 
-    # Render html
-    return render_template("waiverWire.html", tables=[analyzed.to_html(classes='data')], titles=analyzed.columns.values)
-
-
-#@app.route('/compareFranchises')
-#@login_required
-def compareFranchises():
-    # Retrieve the user's leagueID from the session data
-    user_league = session.get('user_league', None)
-
-    # Get Franchises in the league
-    franchise_df = mfl.get_franchises(user_league)
-    # Append a franchise for free agents
-    franchise_df = franchise_df.append({"franchiseID":"FA", "franchiseName":"Free Agent", "franchiseAbbrev":"FA"}, ignore_index=True)
-
-    # Get franchise rosters
-    rosters_df = mfl.get_rosters(user_league)
-
-    # Get Free Agents
-    freeAgent_df = mfl.get_freeAgents(user_league)
-
-    # Get all players, sharkRank, and ADP
-    predictions = db.read_db("predictions")
-
-    # Merge all dfs
-    complete = predictions.merge(rosters_df, on='id_mfl', how='left').merge(franchise_df[['franchiseID', 'franchiseName', 'franchiseAbbrev']], on='franchiseID', how='left')
-    complete['franchiseID'].fillna("FA", inplace=True)
-    complete['franchiseName'].fillna("Free Agent", inplace=True)
-    complete['rosterStatus'].fillna("Free Agent", inplace=True)
-
-    # Get info on available slots from MFL site
+    # Calculate relative values
+    # Get league-specific info on available slots
     posMax = {"QB":2, "RB":5, "WR":6, "TE":5, "PK":2, "DF":2}
     posMin = {"QB":1, "RB":2, "WR":2, "TE":2, "PK":2, "DF":2}
     totalStarters = 15
-    predMethod = "pred"
+    predMethod = "scoreTotal"
 
     # Select starters
-    df = analysis.starterSelector(complete, how=predMethod, startersMax=totalStarters, posMax=posMax, posMin=posMin)
+    analyzed = analysis.starterSelector(analyzed, how=predMethod, startersMax=totalStarters, posMax=posMax, posMin=posMin)
 
     # Find the lowest scoring player on the field and set them as the low bar
     for x in ["QB", "RB", "WR", "TE", "PK", "DF"]:
-        positionMinPred = df.loc[(df['pos']==x) & (df['starting']=='Starter'), predMethod].min()
+        positionMinPred = analyzed.loc[(analyzed['pos']==x) & (analyzed['startSelector']=='Starter'), predMethod].min()
         # Calculate relative values
-        df.loc[df['pos']==x, 'relativeValue'] = df.loc[df['pos']==x, predMethod] - positionMinPred
+        analyzed.loc[analyzed['pos']==x, 'relativeValue'] = analyzed.loc[analyzed['pos']==x, predMethod] - positionMinPred
 
-    # Visualize the data
-    fig = viz.compareFranchises(df, how=predMethod)
-    # Encode in JSON format
-    graphJSON = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
-    # Render html template in flask
-    return render_template('compareFranchises.html', graphJSON=graphJSON)
+    # Convert to json
+    predictiveData = analyzed.to_json()
 
-@app.route('/liveScoring')
+    # Render html
+    return render_template("predictive.html", predictiveData=predictiveData)
+
+
+
+@app.route('/live')
 #@login_required
-def liveScoring():
+def live():
     # Retrieve the user's leagueID from the session data
     user_league = session.get("user_league")
+
+    ## Calculate fantasy scores customized based on league-specific scoring rules
+    scoringDict = {
+        'passA': {"multiplier":0, "bins":[-np.inf, np.inf], "labels":[0]},
+        'passC': {"multiplier":0, "bins":[-np.inf, np.inf], "labels":[0]},
+        'passY': {"multiplier":0.04, "bins":[-np.inf, np.inf], "labels":[0]},
+        'passT': {"multiplier":4, "bins":[-np.inf, np.inf], "labels":[0]},
+        'passI': {"multiplier":-2, "bins":[-np.inf, np.inf], "labels":[0]},
+        'pass2': {"multiplier":2, "bins":[-np.inf, np.inf], "labels":[0]},
+        'rushA': {"multiplier":0.1, "bins":[-np.inf, np.inf], "labels":[0]},
+        'rushY': {"multiplier":0.1, "bins":[-np.inf, np.inf], "labels":[0]},
+        'rushT': {"multiplier":6, "bins":[-np.inf, np.inf], "labels":[0]},
+        'rush2': {"multiplier":2, "bins":[-np.inf, np.inf], "labels":[0]},
+        'recC': {"multiplier":0.25, "bins":[-np.inf, np.inf], "labels":[0]},
+        'recY': {"multiplier":0.1, "bins":[-np.inf, np.inf], "labels":[0]},
+        'recT': {"multiplier":6, "bins":[-np.inf, np.inf], "labels":[0]},
+        'rec2': {"multiplier":2, "bins":[-np.inf, np.inf], "labels":[0]},
+        'fum': {"multiplier":-2, "bins":[-np.inf, np.inf], "labels":[0]},
+        'XPA': {"multiplier":0, "bins":[-np.inf, np.inf], "labels":[0]},
+        'XPM': {"multiplier":3, "bins":[-np.inf, np.inf], "labels":[0]},
+        'FGA': {"multiplier":0, "bins":[-np.inf, np.inf], "labels":[0]},
+        'FGM': {"multiplier":3, "bins":[-np.inf, np.inf], "labels":[0]},
+        'FG50': {"multiplier":5, "bins":[-np.inf, np.inf], "labels":[0]},
+        'defSack': {"multiplier":1, "bins":[-np.inf, np.inf], "labels":[0]},
+        'defI': {"multiplier":2, "bins":[-np.inf, np.inf], "labels":[0]},
+        'defSaf': {"multiplier":2, "bins":[-np.inf, np.inf], "labels":[0]},
+        'defFum': {"multiplier":2, "bins":[-np.inf, np.inf], "labels":[0]},
+        'defBlk': {"multiplier":1.5, "bins":[-np.inf, np.inf], "labels":[0]},
+        'defT': {"multiplier":6, "bins":[-np.inf, np.inf], "labels":[0]},
+        'defPtsAgainst': {"multiplier":0, "bins":[-5,0,6,13,17,21,27,34,45,59,99], "labels":[10,8,7,5,3,2,0,-1,-3,-5]},
+        'defPassYAgainst': {"multiplier":0, "bins":[-np.inf, np.inf], "labels":[0]},
+        'defRushYAgainst': {"multiplier":0, "bins":[-np.inf, np.inf], "labels":[0]},
+        'defYdsAgainst': {"multiplier":0, "bins":[0,274,324,375,425,999], "labels":[5,2,0,-2,-5]}
+    }
 
     # Get MFL scoring data
     liveScores = mfl.get_liveScoring(user_league)
     # Get Franchises in the league
     franchises = mfl.get_franchises(user_league)
     # Get all players and predictions
-    predictions = db.get_df("predictions")
+    predictions = db.read_db("predictions")
+
+    # Calculate predicted fantasy scores based on predicted NFL stats and league-specific scoring rules
+    predictions = analysis.calculate_scoresFF(predictions, scoringDict)
+    # Filter:
+    predictions = predictions.loc[predictions['week']==current_week]
 
     # Merge: merge liveScores, franchises, and predictions
     df = liveScores.merge(franchises, how='left', on='franchiseID').merge(predictions, how='left', on='id_mfl')
@@ -320,23 +342,13 @@ def liveScoring():
     df = df.loc[df['status']=="starter"]
 
     # Analyze:
-    # Divide the player's annual prediction by the number of weeks (17) to get a weekly prediction
-    df['weeklyPred'] = df['pred'] / 17
     # Calculate each player's expected score at the end of the game
     df['expectedLiveScore'] = df.apply(analysis.expectedLiveScore, axis=1)
     # Set colors for chart 
     df['color'] = df.apply(analysis.colorPicker, axis=1)
 
-    # Visualize:
-    fig = viz.liveScoring(df)
-    # Encode in JSON format
-    graphJSON = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+    # Convert to JSON
+    liveData = df.to_json()
     # Render html template in flask
-    return render_template('liveScoring.html', graphJSON=graphJSON)
+    return render_template('live.html', liveData=liveData)
 
-
-@app.route("/logout")
-#@login_required
-def logout():
-    logout_user()
-    return render_template("logout.html")

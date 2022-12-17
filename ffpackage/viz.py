@@ -51,17 +51,17 @@ def liveScoring(df):
     fig = px.bar(df, 
                 x="franchiseName", 
                 y="expectedLiveScore", 
-                color="player", 
+                color="playerName", 
                 color_discrete_sequence=list(df['color']),
                 category_orders={
                     "pos": ["QB", "RB", "WR", "TE", "PK", "DF"]},
-                text='player', 
-                hover_name="player",
+                text='playerName', 
+                hover_name="playerName",
                 hover_data={
                     'expectedLiveScore':True, 
-                    'weeklyPred':True, 
+                    'scoreTotal':True, 
                     'liveScore':True,
-                    'player':False, 
+                    'playerName':False, 
                     'pos':False, 
                     'franchiseAbbrev':False
                     },
@@ -69,7 +69,7 @@ def liveScoring(df):
                     "franchiseName":"Franchise",
                     "liveScore":"Current Score",
                     "expectedLiveScore":"Projected Score",
-                    "weeklyPred":"Initial Prediction"
+                    "scoreTotal":"Initial Prediction"
                 }
                 )
     fig.update_layout(
