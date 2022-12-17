@@ -16,6 +16,7 @@ from flask_login import (
 from oauthlib.oauth2 import WebApplicationClient
 import requests
 import pandas as pd
+import numpy as np
 import plotly
 
 # Internal imports
@@ -68,6 +69,7 @@ def login():
         scope=["openid", "email", "profile"],
     )
     return redirect(request_uri)
+
 # When Google has logged the user in the information is sent here:
 @app.route("/login/callback")
 def callback():
@@ -170,7 +172,7 @@ def franchiseCallback():
 #@login_required
 def allPlayers():
     # get all player info that is stored in the app's database
-    player_df = db.read_db("player_df")
+    player_df = db.read_db("predictions")
     # convert to html tables
     tables = [player_df.to_html(classes='data')]
     titles=player_df.columns.values
@@ -186,10 +188,12 @@ def waiverWire():
     # Get Franchises in the league
     franchise_df = mfl.get_franchises(user_league)
     # Append a row to carry free agents
-    franchise_df = franchise_df.append({"franchiseID":"FA", "franchiseName":"Free Agent"}, ignore_index=True)
+    freeAgentRow =  {"franchiseID":["FA"], "franchiseName":["Free Agent"], "franchiseAbbrev":["FA"]}
+    freeAgentRow = pd.DataFrame.from_dict(freeAgentRow)
+    franchise_df = pd.concat([franchise_df, freeAgentRow], axis=0, ignore_index=True)
 
     # Get franchise rosters
-    rosters_df = mfl.get_rosters(user_league, user_franchise=user_franchise)
+    rosters_df = mfl.get_rosters(user_league)
 
     # Get Free Agents
     freeAgent_df = mfl.get_freeAgents(user_league)
@@ -197,32 +201,51 @@ def waiverWire():
     # Combine Franchise rosters with free agents to get all players
     rosters_df = pd.concat([rosters_df, freeAgent_df], axis=0)
 
-    # Get all players, sharkRank, and ADP from the app's database
+    # Get all players, sharkRank, and ADP
     player_df = db.read_db("predictions")
 
     # Merge all dfs
-    waiverPlayers = player_df.merge(rosters_df, on='id_mfl', how='left').merge(franchise_df[['franchiseID', 'franchiseName']], on='franchiseID', how='left')
-    # Select only players who are not already on a franchise, i.e., are on the waiver wire
-    waiverPlayers = waiverPlayers[waiverPlayers['franchiseID'].notna()]
-    # Sort players by season point prediction
-    waiverPlayers = waiverPlayers.sort_values(by=['pred'], ascending=False)
-    waiverPlayers.reset_index(inplace=True, drop=True)
-    # Format the table
-    waiverPlayers = waiverPlayers[['player', 'age', 'team', 'franchiseName', 'pos', 'posRank', 'KR', 'PR', 'RES', 'pred', 'sharkAbsolute', 'adpAbsolute']]
-    waiverPlayers.rename(columns={
-        'player':'Player',
-        'age':'Age',
-        'team':'Team',
-        'pos':'Position',
-        'posRank': 'Rank',
-        'pred': 'My Prediction',
-        'sharkAbsolute': 'FantasySharks Prediction',
-        'adpAbsolute': 'ADP-Based Prediction'
-    }, inplace=True)
-    waiverPlayers.set_index('Player', drop=True, inplace=True)
-    
+    complete = player_df.merge(rosters_df, on=['id_mfl', 'week'], how='left').merge(franchise_df, on='franchiseID', how='left')
+    complete = complete.loc[complete['franchiseID'].notna()]
+
+    ## Calculate fantasy scores customized based on league-specific scoring rules
+    scoringDict = {
+        'passA': {"multiplier":0, "bins":[-np.inf, np.inf], "labels":[0]},
+        'passC': {"multiplier":0, "bins":[-np.inf, np.inf], "labels":[0]},
+        'passY': {"multiplier":0.04, "bins":[-np.inf, np.inf], "labels":[0]},
+        'passT': {"multiplier":4, "bins":[-np.inf, np.inf], "labels":[0]},
+        'passI': {"multiplier":-2, "bins":[-np.inf, np.inf], "labels":[0]},
+        'pass2': {"multiplier":2, "bins":[-np.inf, np.inf], "labels":[0]},
+        'rushA': {"multiplier":0.1, "bins":[-np.inf, np.inf], "labels":[0]},
+        'rushY': {"multiplier":0.1, "bins":[-np.inf, np.inf], "labels":[0]},
+        'rushT': {"multiplier":6, "bins":[-np.inf, np.inf], "labels":[0]},
+        'rush2': {"multiplier":2, "bins":[-np.inf, np.inf], "labels":[0]},
+        'recC': {"multiplier":0.25, "bins":[-np.inf, np.inf], "labels":[0]},
+        'recY': {"multiplier":0.1, "bins":[-np.inf, np.inf], "labels":[0]},
+        'recT': {"multiplier":6, "bins":[-np.inf, np.inf], "labels":[0]},
+        'rec2': {"multiplier":2, "bins":[-np.inf, np.inf], "labels":[0]},
+        'fum': {"multiplier":-2, "bins":[-np.inf, np.inf], "labels":[0]},
+        'XPA': {"multiplier":0, "bins":[-np.inf, np.inf], "labels":[0]},
+        'XPM': {"multiplier":3, "bins":[-np.inf, np.inf], "labels":[0]},
+        'FGA': {"multiplier":0, "bins":[-np.inf, np.inf], "labels":[0]},
+        'FGM': {"multiplier":3, "bins":[-np.inf, np.inf], "labels":[0]},
+        'FG50': {"multiplier":5, "bins":[-np.inf, np.inf], "labels":[0]},
+        'defSack': {"multiplier":1, "bins":[-np.inf, np.inf], "labels":[0]},
+        'defI': {"multiplier":2, "bins":[-np.inf, np.inf], "labels":[0]},
+        'defSaf': {"multiplier":2, "bins":[-np.inf, np.inf], "labels":[0]},
+        'defFum': {"multiplier":2, "bins":[-np.inf, np.inf], "labels":[0]},
+        'defBlk': {"multiplier":1.5, "bins":[-np.inf, np.inf], "labels":[0]},
+        'defT': {"multiplier":6, "bins":[-np.inf, np.inf], "labels":[0]},
+        'defPtsAgainst': {"multiplier":0, "bins":[-5,0,6,13,17,21,27,34,45,59,99], "labels":[10,8,7,5,3,2,0,-1,-3,-5]},
+        'defPassYAgainst': {"multiplier":0, "bins":[-np.inf, np.inf], "labels":[0]},
+        'defRushYAgainst': {"multiplier":0, "bins":[-np.inf, np.inf], "labels":[0]},
+        'defYdsAgainst': {"multiplier":0, "bins":[0,274,324,375,425,999], "labels":[5,2,0,-2,-5]}
+    }
+    # Run Calculation function
+    analyzed = analysis.calculate_scoresFF(complete, scoringDict)
+
     # Render html
-    return render_template("waiverWire.html", tables=[waiverPlayers.to_html(classes='data')], titles=waiverPlayers.columns.values)
+    return render_template("waiverWire.html", tables=[analyzed.to_html(classes='data')], titles=analyzed.columns.values)
 
 
 #@app.route('/compareFranchises')
@@ -233,39 +256,41 @@ def compareFranchises():
 
     # Get Franchises in the league
     franchise_df = mfl.get_franchises(user_league)
-    # Append a franchise for free agents (Removed this feature because did not want to look at Free Agents in this view)
-    # franchise_df = franchise_df.append({"franchiseID":"FA", "franchiseName":"Free Agent", "franchiseAbbrev":"FA"}, ignore_index=True)
+    # Append a franchise for free agents
+    franchise_df = franchise_df.append({"franchiseID":"FA", "franchiseName":"Free Agent", "franchiseAbbrev":"FA"}, ignore_index=True)
+
     # Get franchise rosters
-    rosteredPlayers = mfl.get_rosters(user_league)
+    rosters_df = mfl.get_rosters(user_league)
+
+    # Get Free Agents
+    freeAgent_df = mfl.get_freeAgents(user_league)
+
     # Get all players, sharkRank, and ADP
     predictions = db.read_db("predictions")
 
     # Merge all dfs
-    rosteredPlayers = predictions.merge(rosteredPlayers, on='id_mfl', how='left').merge(franchise_df[['franchiseID', 'franchiseName', 'franchiseAbbrev']], on='franchiseID', how='left')
-    rosteredPlayers['franchiseID'].fillna("FA", inplace=True)
-    rosteredPlayers['franchiseName'].fillna("Free Agent", inplace=True)
-    rosteredPlayers['rosterStatus'].fillna("Free Agent", inplace=True)
+    complete = predictions.merge(rosters_df, on='id_mfl', how='left').merge(franchise_df[['franchiseID', 'franchiseName', 'franchiseAbbrev']], on='franchiseID', how='left')
+    complete['franchiseID'].fillna("FA", inplace=True)
+    complete['franchiseName'].fillna("Free Agent", inplace=True)
+    complete['rosterStatus'].fillna("Free Agent", inplace=True)
 
     # Get info on available slots from MFL site
-    # For now the numbers are hard-coded
     posMax = {"QB":2, "RB":5, "WR":6, "TE":5, "PK":2, "DF":2}
     posMin = {"QB":1, "RB":2, "WR":2, "TE":2, "PK":2, "DF":2}
     totalStarters = 15
-    # The user will select a prediction method (ADP, FantasySharks, this app, etc.)
-    # For now the method is hard-coded to this app's predictions
     predMethod = "pred"
 
     # Select starters
-    startingPlayers = analysis.starterSelector(rosteredPlayers, how=predMethod, startersMax=totalStarters, posMax=posMax, posMin=posMin)
+    df = analysis.starterSelector(complete, how=predMethod, startersMax=totalStarters, posMax=posMax, posMin=posMin)
 
     # Find the lowest scoring player on the field and set them as the low bar
     for x in ["QB", "RB", "WR", "TE", "PK", "DF"]:
-        positionMinPred = startingPlayers.loc[(startingPlayers['pos']==x) & (startingPlayers['starting']=='Starter'), predMethod].min()
+        positionMinPred = df.loc[(df['pos']==x) & (df['starting']=='Starter'), predMethod].min()
         # Calculate relative values
-        startingPlayers.loc[startingPlayers['pos']==x, 'relativeValue'] = startingPlayers.loc[startingPlayers['pos']==x, predMethod] - positionMinPred
+        df.loc[df['pos']==x, 'relativeValue'] = df.loc[df['pos']==x, predMethod] - positionMinPred
 
     # Visualize the data
-    fig = viz.compareFranchises(startingPlayers, how=predMethod)
+    fig = viz.compareFranchises(df, how=predMethod)
     # Encode in JSON format
     graphJSON = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
     # Render html template in flask
@@ -282,28 +307,28 @@ def liveScoring():
     # Get Franchises in the league
     franchises = mfl.get_franchises(user_league)
     # Get all players and predictions
-    predictions = db.read_db("predictions")
+    predictions = db.get_df("predictions")
 
     # Merge: merge liveScores, franchises, and predictions
-    liveScores = liveScores.merge(franchises, how='left', on='franchiseID').merge(predictions, how='left', on='id_mfl')
+    df = liveScores.merge(franchises, how='left', on='franchiseID').merge(predictions, how='left', on='id_mfl')
 
     # Clean: convert to float data types
-    liveScores['liveScore'] = liveScores['liveScore'].astype('float64')
-    liveScores['secondsRemaining'] = liveScores['secondsRemaining'].astype('float64')
+    df['liveScore'] = df['liveScore'].astype('float64')
+    df['secondsRemaining'] = df['secondsRemaining'].astype('float64')
 
     # Filter:
-    liveScores = liveScores.loc[liveScores['status']=="starter"]
+    df = df.loc[df['status']=="starter"]
 
     # Analyze:
     # Divide the player's annual prediction by the number of weeks (17) to get a weekly prediction
-    liveScores['weeklyPred'] = liveScores['pred'] / 17
+    df['weeklyPred'] = df['pred'] / 17
     # Calculate each player's expected score at the end of the game
-    liveScores['expectedLiveScore'] = liveScores.apply(analysis.expectedLiveScore, axis=1)
+    df['expectedLiveScore'] = df.apply(analysis.expectedLiveScore, axis=1)
     # Set colors for chart 
-    liveScores['color'] = liveScores.apply(analysis.colorPicker, axis=1)
+    df['color'] = df.apply(analysis.colorPicker, axis=1)
 
     # Visualize:
-    fig = viz.liveScoring(liveScores)
+    fig = viz.liveScoring(df)
     # Encode in JSON format
     graphJSON = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
     # Render html template in flask
